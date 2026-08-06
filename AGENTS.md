@@ -130,3 +130,11 @@ The update script runs `npm install --legacy-peer-deps` on startup. Everything b
 - **Tests:** `npm test` runs the full vitest suite (excludes `test/integration.test.ts`). `npm run test:integration` needs a live server on `:3111`.
 - **No API keys needed to boot.** With no LLM/embedding provider configured it degrades to BM25-only search, so purely semantic queries (no keyword overlap) can return 0 hits. Install the optional `@xenova/transformers` for free local embeddings if you need the vector leg.
 - **State** persists under `./data/` (gitignored); safe to delete for a clean slate.
+
+### Adjacent connected projects (monorepo sub-packages)
+
+The update script installs the root deps plus `website/`. The other sub-projects are dependency-free and need no install.
+
+- **`website/`** — the marketing site (Next.js 16, its own committed `package-lock.json`). Own scripts: `npm --prefix website run dev` (dev server on `:3000`), `npm --prefix website run build`, `npm --prefix website run lint`. `predev`/`prebuild` auto-run `scripts/gen-meta.mjs`, which reads the root repo stats — expect it to run from the repo root context.
+- **`packages/mcp/`** (`@agentmemory/mcp`) — thin shim over the root package's MCP entrypoint. No build/test; equivalent to `node dist/cli.mjs mcp` from root. Depends on `@agentmemory/agentmemory` (the root package), so build the root first.
+- **`integrations/filesystem-watcher/`** (`@agentmemory/fs-watcher`), **`integrations/openclaw/`**, **`integrations/pi/`** — standalone Node/TS scripts with no dependencies and no build/test scripts. Nothing to install; `node --check` passes on the `.mjs` entrypoints.

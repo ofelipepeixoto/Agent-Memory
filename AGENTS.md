@@ -117,3 +117,16 @@ Hook scripts in `src/hooks/` are standalone Node.js scripts (no iii-sdk import).
 - 12 hooks, 4 skills
 - 50+ iii functions
 - 950+ tests
+
+## Cursor Cloud specific instructions
+
+The update script runs `npm install --legacy-peer-deps` on startup. Everything below is context the script does NOT handle.
+
+- **Always install with `--legacy-peer-deps`.** No lockfile is committed (`package-lock.json` is gitignored), so a plain `npm install` fails with `ERESOLVE`: `@anthropic-ai/claude-agent-sdk` peer-requires `@anthropic-ai/sdk >=0.93.0` while the repo pins `^0.39.0`. CI works around this the same way (see `.github/workflows/ci.yml`).
+- **`iii-engine` is a native binary, not an npm package.** It is pinned to `v0.11.2` (do not bump — v0.11.6+ uses an incompatible worker model). `iii-sdk` on npm is only the client. The engine binary is not part of the update script; `npm start` auto-installs it to `~/.local/bin/iii` on first run in a non-interactive shell. To pre-install manually: `curl -fsSL "https://github.com/iii-hq/iii/releases/download/iii/v0.11.2/iii-x86_64-unknown-linux-gnu.tar.gz" | tar -xz -C ~/.local/bin && chmod +x ~/.local/bin/iii`.
+- **Run the full stack (engine + worker + viewer):** `npm start` (i.e. `node dist/cli.mjs`) after `npm run build`. Ensure `~/.local/bin` is on `PATH` and run non-interactively (set `CI=1`) so the CLI skips the global-install / console-install prompts. REST API is on `:3111`; the viewer is on REST port + 2 (usually `:3113`, but it shifts to `:3114` when `:3113` is taken). Query `GET /agentmemory/livez` to read the actual `viewerPort`. Stop with `node dist/cli.mjs stop`.
+- **Hot-reload worker dev:** `npm run dev` (`tsx src/index.ts`) requires an engine already running on `ws://localhost:49134` — it does not start one.
+- **"Lint" = the TypeScript build.** There is no ESLint; `npm run build` (tsdown) is the type/compile gate.
+- **Tests:** `npm test` runs the full vitest suite (excludes `test/integration.test.ts`). `npm run test:integration` needs a live server on `:3111`.
+- **No API keys needed to boot.** With no LLM/embedding provider configured it degrades to BM25-only search, so purely semantic queries (no keyword overlap) can return 0 hits. Install the optional `@xenova/transformers` for free local embeddings if you need the vector leg.
+- **State** persists under `./data/` (gitignored); safe to delete for a clean slate.

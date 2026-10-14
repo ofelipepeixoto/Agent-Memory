@@ -9,7 +9,7 @@ import type {
   GraphEdge,
 } from "../types.js";
 import { getVisibleTools } from "./tools-registry.js";
-import { timingSafeCompare } from "../auth.js";
+import { authorizeBearer, validateAccessMode, type AccessMode } from "../access-policy.js";
 
 type McpResponse = {
   status_code: number;
@@ -43,18 +43,14 @@ export function registerMcpEndpoints(
   sdk: ISdk,
   kv: StateKV,
   secret?: string,
+  accessMode: AccessMode = "local",
 ): void {
+  validateAccessMode(accessMode, secret);
   function checkAuth(
     req: ApiRequest,
     sec: string | undefined,
   ): McpResponse | null {
-    if (!sec) return null;
-    const auth =
-      req.headers?.["authorization"] || req.headers?.["Authorization"];
-    if (typeof auth !== "string" || !timingSafeCompare(auth, `Bearer ${sec}`)) {
-      return { status_code: 401, body: { error: "unauthorized" } };
-    }
-    return null;
+    return authorizeBearer(req.headers, sec, accessMode);
   }
 
   sdk.registerFunction("mcp::tools::list", 

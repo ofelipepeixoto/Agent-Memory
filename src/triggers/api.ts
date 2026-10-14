@@ -7,7 +7,7 @@ import { getLatestHealth } from "../health/monitor.js";
 import type { MetricsStore } from "../eval/metrics-store.js";
 import type { ResilientProvider } from "../providers/resilient.js";
 import { VERSION } from "../version.js";
-import { timingSafeCompare } from "../auth.js";
+import { authorizeBearer, validateAccessMode, type AccessMode } from "../access-policy.js";
 import { renderViewerDocument } from "../viewer/document.js";
 import { getBoundViewerPort, getViewerSkipped } from "../viewer/server.js";
 import { MAX_FILES_UPPER_BOUND } from "../functions/replay.js";
@@ -32,20 +32,6 @@ function parseOptionalInt(raw: unknown): number | undefined {
   return Number.isFinite(n) ? n : undefined;
 }
 
-function checkAuth(
-  req: ApiRequest,
-  secret: string | undefined,
-): Response | null {
-  if (!secret) return null;
-  const auth = req.headers?.["authorization"] || req.headers?.["Authorization"];
-  if (
-    typeof auth !== "string" ||
-    !timingSafeCompare(auth, `Bearer ${secret}`)
-  ) {
-    return { status_code: 401, body: { error: "unauthorized" } };
-  }
-  return null;
-}
 
 function requireConfiguredSecret(
   secret: string | undefined,
@@ -119,24 +105,18 @@ export function registerApiTriggers(
   secret?: string,
   metricsStore?: MetricsStore,
   provider?: ResilientProvider | { circuitState?: unknown },
+  accessMode: AccessMode = "local",
 ): void {
+  validateAccessMode(accessMode, secret);
+  const checkAuth = (req: ApiRequest, sec: string | undefined): Response | null =>
+    authorizeBearer(req.headers, sec, accessMode);
   sdk.registerFunction(
     "middleware::api-auth",
     async (input: {
       request?: { headers?: Record<string, string | undefined> };
     }) => {
-      if (!secret) return { action: "continue" };
-      const headers = input?.request?.headers || {};
-      const auth = headers["authorization"] || headers["Authorization"];
-      if (
-        typeof auth !== "string" ||
-        !timingSafeCompare(auth, `Bearer ${secret}`)
-      ) {
-        return {
-          action: "respond",
-          response: { status_code: 401, body: { error: "unauthorized" } },
-        };
-      }
+      const denied = authorizeBearer(input?.request?.headers, secret, accessMode);
+      if (denied) return { action: "respond", response: denied };
       return { action: "continue" };
     },
   );

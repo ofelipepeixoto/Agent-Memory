@@ -1,3 +1,4 @@
+import { validateAccessMode } from "./access-policy.js";
 import { registerWorker } from "iii-sdk";
 import {
   loadConfig,
@@ -129,6 +130,8 @@ process.on("unhandledRejection", (reason) => {
 });
 
 async function main() {
+  const secret = getEnvVar("AGENTMEMORY_SECRET");
+  const accessMode = validateAccessMode(getEnvVar("AGENTMEMORY_ACCESS_MODE"), secret);
   const config = loadConfig();
   const embeddingConfig = loadEmbeddingConfig();
   const fallbackConfig = loadFallbackConfig();
@@ -186,7 +189,6 @@ async function main() {
   });
 
   const kv = new StateKV(sdk);
-  const secret = getEnvVar("AGENTMEMORY_SECRET");
   const metricsStore = new MetricsStore(kv);
   const dedupMap = new DedupMap();
 
@@ -337,9 +339,9 @@ async function main() {
     hybridSearch.search(query, limit),
   );
 
-  registerApiTriggers(sdk, kv, secret, metricsStore, provider);
+  registerApiTriggers(sdk, kv, secret, metricsStore, provider, accessMode);
   registerEventTriggers(sdk, kv);
-  registerMcpEndpoints(sdk, kv, secret);
+  registerMcpEndpoints(sdk, kv, secret, accessMode);
 
   const healthMonitor = registerHealthMonitor(sdk, kv);
 
@@ -488,7 +490,7 @@ async function main() {
   );
 
   const viewerPort = config.restPort + 2;
-  const viewerServer = startViewerServer(
+  const viewerServer = accessMode === "shared" ? null : startViewerServer(
     viewerPort,
     kv,
     sdk,
@@ -543,7 +545,7 @@ async function main() {
     healthMonitor.stop();
     dedupMap.stop();
     indexPersistence.stop();
-    await new Promise<void>((resolve) => viewerServer.close(() => resolve()));
+    if (viewerServer) await new Promise<void>((resolve) => viewerServer.close(() => resolve()));
     await indexPersistence.save().catch((err) => {
       console.warn(`[agentmemory] Failed to save index on shutdown:`, err);
     });

@@ -7,6 +7,12 @@ vi.mock("../src/logger.js", () => ({
 vi.mock("node:fs", () => ({
   existsSync: vi.fn().mockReturnValue(false),
   readFileSync: vi.fn(),
+  lstatSync: vi.fn(() => { throw Object.assign(new Error("missing fixture"), { code: "ENOENT" }); }),
+  openSync: vi.fn(() => 20),
+  closeSync: vi.fn(),
+  fsyncSync: vi.fn(),
+  renameSync: vi.fn(),
+  unlinkSync: vi.fn(),
   writeFileSync: vi.fn(),
   mkdirSync: vi.fn(),
 }));
@@ -122,7 +128,7 @@ describe("InMemoryKV", () => {
     kvWithPersist.persist();
 
     expect(writeFileSync).toHaveBeenCalledWith(
-      "/tmp/test-kv.json",
+      expect.any(Number),
       expect.any(String),
       "utf-8",
     );
@@ -179,7 +185,7 @@ describe("handleToolCall", () => {
     const parsed = JSON.parse(result.content[0].text);
     expect(parsed.saved).toMatch(/^mem_/);
     expect(writeFileSync).toHaveBeenCalledWith(
-      "/tmp/test-handle.json",
+      expect.any(Number),
       expect.any(String),
       "utf-8",
     );
